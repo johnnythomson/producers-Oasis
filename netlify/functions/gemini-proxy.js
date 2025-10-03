@@ -1,10 +1,9 @@
-// netlify/functions/gemini-proxy.js (UPDATED - for getCreativePrompt)
+// netlify/functions/gemini-proxy.js (UPDATED - for generateDailySchedule)
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
     console.error("GEMINI_API_KEY environment variable is not set.");
-    // Consider returning a 500 here if you want to fail fast for missing key
 }
 
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -40,28 +39,22 @@ exports.handler = async function(event, context) {
       responseText = (await result.response).text();
     } else if (type === 'image_analysis') {
         if (!imageData || !mimeType) {
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ message: 'Image data and mime type are required for image analysis.' }),
-                headers: { "Content-Type": "application/json" }
-            };
+            return { statusCode: 400, body: JSON.stringify({ message: 'Image data and mime type are required for image analysis.' }), headers: { "Content-Type": "application/json" } };
         }
-
-        const imageParts = [
-            { inlineData: { data: imageData, mimeType: mimeType } },
-        ];
+        const imageParts = [{ inlineData: { data: imageData, mimeType: mimeType } }];
         const content = [];
         if (prompt) { content.push(prompt); }
         content.push(...imageParts);
-
         const result = await visionModel.generateContent(content);
         responseText = (await result.response).text();
-    } else if (type === 'creative_prompt') { // <-- NEW TYPE HANDLING
-        // The prompt coming from getCreativePrompt might already be self-contained
+    } else if (type === 'creative_prompt') {
         const result = await textModel.generateContent(prompt);
         responseText = (await result.response).text();
+    } else if (type === 'daily_schedule') { // <-- NEW TYPE HANDLING
+        const result = await textModel.generateContent(prompt); // The prompt from the client should be specific enough
+        responseText = (await result.response).text();
     }
-    else { // Default to general text generation (if no specific type is matched)
+    else { // Default to general text generation
       const result = await textModel.generateContent(prompt);
       responseText = (await result.response).text();
     }
