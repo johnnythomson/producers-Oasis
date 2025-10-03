@@ -1,8 +1,5 @@
 // services/geminiService.ts (UPDATED)
 
-// No need to import GoogleGenerativeAI here anymore for client-side
-// as API calls are proxied through Netlify Functions.
-
 interface GeminiProxyResponse {
   text: string;
 }
@@ -49,11 +46,11 @@ export async function generateChordProgression(genre: string): Promise<string> {
   }
 }
 
-// Restored function for Studio Vibe Image (Image Analysis)
+// Existing function for Studio Vibe Image (Image Analysis)
 export async function generateStudioVibeImage(
-  prompt: string, // Text prompt to accompany the image, e.g., "What's the vibe of this studio?"
-  imageData: string, // Base64 encoded image data
-  mimeType: string // e.g., "image/jpeg", "image/png"
+  prompt: string,
+  imageData: string,
+  mimeType: string
 ): Promise<string> {
   try {
     const response = await fetch('/api/gemini-proxy', {
@@ -63,7 +60,7 @@ export async function generateStudioVibeImage(
         prompt: prompt,
         imageData: imageData,
         mimeType: mimeType,
-        type: 'image_analysis' // Changed type to explicitly denote image analysis
+        type: 'image_analysis'
       }),
     });
 
@@ -75,6 +72,30 @@ export async function generateStudioVibeImage(
     return data.text;
   } catch (error) {
     console.error('Error analyzing studio vibe image:', error);
+    throw error;
+  }
+}
+
+// NEW FUNCTION: getCreativePrompt
+export async function getCreativePrompt(input: string): Promise<string> {
+  try {
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Generate a creative prompt or idea related to music production, song writing, or sound design based on the following input: "${input}". Be concise and inspiring.`,
+        type: 'creative_prompt' // Specify the type for the proxy function
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData: { message?: string } = await response.json();
+      throw new Error(errorData.message || 'Failed to get creative prompt from proxy.');
+    }
+    const data: GeminiProxyResponse = await response.json();
+    return data.text;
+  } catch (error) {
+    console.error('Error getting creative prompt:', error);
     throw error;
   }
 }
