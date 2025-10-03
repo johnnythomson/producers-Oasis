@@ -1,4 +1,4 @@
-// netlify/functions/gemini-proxy.js (UPDATED - refined for image analysis)
+// netlify/functions/gemini-proxy.js (UPDATED - for getCreativePrompt)
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -9,7 +9,6 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Initialize both a text model and a vision model
 const textModel = genAI.getGenerativeModel({ model: "gemini-pro" });
 const visionModel = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
 
@@ -25,8 +24,7 @@ exports.handler = async function(event, context) {
   try {
     const { prompt, type, imageData, mimeType } = JSON.parse(event.body);
 
-    // Basic validation
-    if (!prompt && type !== 'image_analysis') { // Prompt might be purely for analysis prompt
+    if (!prompt && type !== 'image_analysis') {
       return {
         statusCode: 400,
         body: JSON.stringify({ message: 'Prompt is required for text generation types' }),
@@ -40,7 +38,7 @@ exports.handler = async function(event, context) {
       const fullPrompt = `Generate a chord progression in the style of ${prompt}. Provide only the chords, separated by commas.`;
       const result = await textModel.generateContent(fullPrompt);
       responseText = (await result.response).text();
-    } else if (type === 'image_analysis') { // Changed from image_generation to image_analysis
+    } else if (type === 'image_analysis') {
         if (!imageData || !mimeType) {
             return {
                 statusCode: 400,
@@ -50,23 +48,20 @@ exports.handler = async function(event, context) {
         }
 
         const imageParts = [
-            {
-                inlineData: {
-                    data: imageData, // Base64 string
-                    mimeType: mimeType,
-                },
-            },
+            { inlineData: { data: imageData, mimeType: mimeType } },
         ];
-
         const content = [];
-        if (prompt) {
-            content.push(prompt); // Add text prompt if provided
-        }
-        content.push(...imageParts); // Add image data
+        if (prompt) { content.push(prompt); }
+        content.push(...imageParts);
 
-        const result = await visionModel.generateContent(content); // Use vision model
+        const result = await visionModel.generateContent(content);
         responseText = (await result.response).text();
-    } else { // Default to general text generation
+    } else if (type === 'creative_prompt') { // <-- NEW TYPE HANDLING
+        // The prompt coming from getCreativePrompt might already be self-contained
+        const result = await textModel.generateContent(prompt);
+        responseText = (await result.response).text();
+    }
+    else { // Default to general text generation (if no specific type is matched)
       const result = await textModel.generateContent(prompt);
       responseText = (await result.response).text();
     }
