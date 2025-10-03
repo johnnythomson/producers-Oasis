@@ -1,4 +1,4 @@
-// netlify/functions/gemini-proxy.js (UPDATED FOR IMAGE GENERATION)
+// netlify/functions/gemini-proxy.js (UPDATED - refined for image analysis)
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -9,9 +9,9 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Initialize both a text model and a vision (image) model
+// Initialize both a text model and a vision model
 const textModel = genAI.getGenerativeModel({ model: "gemini-pro" });
-const visionModel = genAI.getGenerativeModel({ model: "gemini-pro-vision" }); // Use gemini-pro-vision for image input/multimodal
+const visionModel = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
 
 exports.handler = async function(event, context) {
   if (event.httpMethod !== 'POST') {
@@ -23,9 +23,10 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    const { prompt, type, imageData, mimeType } = JSON.parse(event.body); // <-- Capture imageData and mimeType
+    const { prompt, type, imageData, mimeType } = JSON.parse(event.body);
 
-    if (!prompt && type !== 'image_generation') { // Prompt might be optional for some image types if just sending data
+    // Basic validation
+    if (!prompt && type !== 'image_analysis') { // Prompt might be purely for analysis prompt
       return {
         statusCode: 400,
         body: JSON.stringify({ message: 'Prompt is required for text generation types' }),
@@ -39,38 +40,33 @@ exports.handler = async function(event, context) {
       const fullPrompt = `Generate a chord progression in the style of ${prompt}. Provide only the chords, separated by commas.`;
       const result = await textModel.generateContent(fullPrompt);
       responseText = (await result.response).text();
-    } else if (type === 'image_generation') {
-      if (!imageData || !mimeType) {
-          return {
-              statusCode: 400,
-              body: JSON.stringify({ message: 'Image data and mime type are required for image generation.' }),
-              headers: { "Content-Type": "application/json" }
-          };
-      }
-      // For image generation, Gemini Pro Vision takes image data as part of content
-      // This assumes the prompt is describing *what to generate the image of*
-      // If you mean "generate text based on an image input", that's different.
-      // Let's assume for "generateStudioVibeImage" you want a *text response* describing an image vibe.
-      const imageParts = [
-          {
-              inlineData: {
-                  data: imageData, // Base64 string
-                  mimeType: mimeType,
-              },
-          },
-      ];
+    } else if (type === 'image_analysis') { // Changed from image_generation to image_analysis
+        if (!imageData || !mimeType) {
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ message: 'Image data and mime type are required for image analysis.' }),
+                headers: { "Content-Type": "application/json" }
+            };
+        }
 
-      // Use the prompt to describe what to do with the image
-      const result = await visionModel.generateContent([prompt, ...imageParts]);
-      responseText = (await result.response).text();
+        const imageParts = [
+            {
+                inlineData: {
+                    data: imageData, // Base64 string
+                    mimeType: mimeType,
+                },
+            },
+        ];
 
-      // IMPORTANT: If "generateStudioVibeImage" means "generate a new image",
-      // Gemini Pro Vision does NOT generate new images directly. It analyzes images.
-      // If you need actual image generation (text-to-image), you'd need a different API (e.g., DALL-E, Stability AI).
-      // For now, I'm assuming it means "analyze an image and describe its vibe".
-      // If it means "generate an image based on text", please clarify.
-    }
-    else { // Default to general text generation
+        const content = [];
+        if (prompt) {
+            content.push(prompt); // Add text prompt if provided
+        }
+        content.push(...imageParts); // Add image data
+
+        const result = await visionModel.generateContent(content); // Use vision model
+        responseText = (await result.response).text();
+    } else { // Default to general text generation
       const result = await textModel.generateContent(prompt);
       responseText = (await result.response).text();
     }
