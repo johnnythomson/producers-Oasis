@@ -1,20 +1,113 @@
-// services/geminiService.ts (UPDATED)
-import { Schedule } from '../types'; // Make sure this import is correct
+// services/geminiService.ts
+import { Schedule } from '../types'; // Ensure this import path is correct for your project structure
 
 interface GeminiProxyResponse {
   text: string;
 }
 
-// ... (keep the other exported functions: generateTextWithGemini, generateChordProgression, generateStudioVibeImage, getCreativePrompt)
+// Function for general text generation (from App.tsx)
+export async function generateTextWithGemini(prompt: string): Promise<string> {
+  try {
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, type: 'general_text' }),
+    });
 
-// NEW FUNCTION: generateDailySchedule
+    if (!response.ok) {
+      const errorData: { message?: string } = await response.json();
+      throw new Error(errorData.message || 'Failed to generate text from proxy.');
+    }
+    const data: GeminiProxyResponse = await response.json();
+    return data.text;
+  } catch (error) {
+    console.error('Error generating text with Gemini:', error);
+    throw error;
+  }
+}
+
+// Function for Chord Progression generation (from ChordGenerator.tsx)
+export async function generateChordProgression(genre: string): Promise<string> {
+  try {
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: genre, type: 'chord_progression' }),
+    });
+
+    if (!response.ok) {
+      const errorData: { message?: string } = await response.json();
+      throw new Error(errorData.message || 'Failed to generate chord progression from proxy.');
+    }
+    const data: GeminiProxyResponse = await response.json();
+    return data.text;
+  } catch (error) {
+    console.error('Error generating chord progression:', error);
+    throw error;
+  }
+}
+
+// Function for Studio Vibe Image Analysis (from VibeGenerator.tsx)
+export async function generateStudioVibeImage(
+  prompt: string,
+  imageData: string,
+  mimeType: string
+): Promise<string> {
+  try {
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: prompt,
+        imageData: imageData,
+        mimeType: mimeType,
+        type: 'image_analysis'
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData: { message?: string } = await response.json();
+      throw new Error(errorData.message || 'Failed to analyze image vibe from proxy.');
+    }
+    const data: GeminiProxyResponse = await response.json();
+    return data.text;
+  } catch (error) {
+    console.error('Error analyzing studio vibe image:', error);
+    throw error;
+  }
+}
+
+// Function for getting a creative prompt (from BlockBreaker.tsx)
+export async function getCreativePrompt(input: string): Promise<string> {
+  try {
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Generate a creative prompt or idea related to music production, song writing, or sound design based on the following input: "${input}". Be concise and inspiring.`,
+        type: 'creative_prompt'
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData: { message?: string } = await response.json();
+      throw new Error(errorData.message || 'Failed to get creative prompt from proxy.');
+    }
+    const data: GeminiProxyResponse = await response.json();
+    return data.text;
+  } catch (error) {
+    console.error('Error getting creative prompt:', error);
+    throw error;
+  }
+}
+
+// Function for generating a daily schedule (from SchedulePlanner.tsx)
 export async function generateDailySchedule(
   focus: string,
   hours: number,
   includeBreaks: boolean
 ): Promise<Schedule[]> {
   try {
-    // Construct a detailed prompt to ensure Gemini returns a parsable JSON string
     const prompt = `
       Generate a daily schedule for a music producer with a focus on "${focus}" for a total of ${hours} hours.
       ${includeBreaks ? "Include breaks in the schedule." : "Do not include breaks."}
@@ -38,9 +131,7 @@ export async function generateDailySchedule(
     }
     const data: GeminiProxyResponse = await response.json();
 
-    // Attempt to parse the text response from Gemini into a Schedule array
     try {
-        // Clean up the response from Gemini in case it includes markdown code fences
         const cleanedText = data.text.replace(/```json/g, '').replace(/```/g, '').trim();
         const schedule = JSON.parse(cleanedText);
         return schedule as Schedule[];
