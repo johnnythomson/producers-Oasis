@@ -1,17 +1,10 @@
-// netlify/functions/gemini-proxy.js
-// This function will run on Netlify's server, keeping your API key secret.
-
+// netlify/functions/gemini-proxy.js (UPDATED)
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// IMPORTANT: The API_KEY is accessed from Netlify's secure environment variables.
-// This key will NOT be exposed to the client-side.
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// You can specify your desired model here.
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
 exports.handler = async function(event, context) {
-  // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -21,7 +14,7 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    const { prompt } = JSON.parse(event.body);
+    const { prompt, type } = JSON.parse(event.body); // <-- Capture 'type'
 
     if (!prompt) {
       return {
@@ -31,7 +24,15 @@ exports.handler = async function(event, context) {
       };
     }
 
-    const result = await model.generateContent(prompt);
+    let fullPrompt = prompt;
+
+    // Customize prompt based on type
+    if (type === 'chord_progression') {
+      fullPrompt = `Generate a chord progression in the style of ${prompt}. Provide only the chords, separated by commas.`;
+    }
+    // You can add more 'type' specific logic here if needed for other Gemini uses
+
+    const result = await model.generateContent(fullPrompt); // Use fullPrompt
     const response = await result.response;
     const text = response.text();
 
