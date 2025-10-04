@@ -1,146 +1,95 @@
-// services/geminiService.ts
-import { Schedule } from '../types'; // Ensure this import path is correct for your project structure
+import { GoogleGenAI, Type } from "@google/genai";
+import { Schedule } from "../types";
 
-interface GeminiProxyResponse {
-  text: string;
-}
+// Fix: Updated API key retrieval to use `process.env.API_KEY` to align with coding guidelines and resolve the TypeScript error with `import.meta.env`.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Function for general text generation (from App.tsx)
-export async function generateTextWithGemini(prompt: string): Promise<string> {
-  try {
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, type: 'general_text' }),
-    });
-
-    if (!response.ok) {
-      const errorData: { message?: string } = await response.json();
-      throw new Error(errorData.message || 'Failed to generate text from proxy.');
-    }
-    const data: GeminiProxyResponse = await response.json();
-    return data.text;
-  } catch (error) {
-    console.error('Error generating text with Gemini:', error);
-    throw error;
-  }
-}
-
-// Function for Chord Progression generation (from ChordGenerator.tsx)
-export async function generateChordProgression(genre: string): Promise<string> {
-  try {
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: genre, type: 'chord_progression' }),
-    });
-
-    if (!response.ok) {
-      const errorData: { message?: string } = await response.json();
-      throw new Error(errorData.message || 'Failed to generate chord progression from proxy.');
-    }
-    const data: GeminiProxyResponse = await response.json();
-    return data.text;
-  } catch (error) {
-    console.error('Error generating chord progression:', error);
-    throw error;
-  }
-}
-
-// Function for Studio Vibe Image Analysis (from VibeGenerator.tsx)
-export async function generateStudioVibeImage(
-  prompt: string,
-  imageData: string,
-  mimeType: string
-): Promise<string> {
-  try {
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: prompt,
-        imageData: imageData,
-        mimeType: mimeType,
-        type: 'image_analysis'
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData: { message?: string } = await response.json();
-      throw new Error(errorData.message || 'Failed to analyze image vibe from proxy.');
-    }
-    const data: GeminiProxyResponse = await response.json();
-    return data.text;
-  } catch (error) {
-    console.error('Error analyzing studio vibe image:', error);
-    throw error;
-  }
-}
-
-// Function for getting a creative prompt (from BlockBreaker.tsx)
-export async function getCreativePrompt(input: string): Promise<string> {
-  try {
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: `Generate a creative prompt or idea related to music production, song writing, or sound design based on the following input: "${input}". Be concise and inspiring.`,
-        type: 'creative_prompt'
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData: { message?: string } = await response.json();
-      throw new Error(errorData.message || 'Failed to get creative prompt from proxy.');
-    }
-    const data: GeminiProxyResponse = await response.json();
-    return data.text;
-  } catch (error) {
-    console.error('Error getting creative prompt:', error);
-    throw error;
-  }
-}
-
-// Function for generating a daily schedule (from SchedulePlanner.tsx)
-export async function generateDailySchedule(
-  focus: string,
-  hours: number,
-  includeBreaks: boolean
-): Promise<Schedule[]> {
-  try {
-    const prompt = `
-      Generate a daily schedule for a music producer with a focus on "${focus}" for a total of ${hours} hours.
-      ${includeBreaks ? "Include breaks in the schedule." : "Do not include breaks."}
-      Please return the schedule as a JSON array of objects, where each object has a "time" (string, e.g., "10:00 AM - 11:00 AM") and a "task" (string).
-      Do not include any other text, just the raw JSON array.
-      Example format: [{"time": "10:00 AM - 11:00 AM", "task": "Listen to reference tracks"}, {"time": "11:00 AM - 1:00 PM", "task": "Work on main melody"}]
-    `;
-
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: prompt,
-        type: 'daily_schedule'
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData: { message?: string } = await response.json();
-      throw new Error(errorData.message || 'Failed to generate schedule from proxy.');
-    }
-    const data: GeminiProxyResponse = await response.json();
-
+export const generateChordProgression = async (): Promise<string> => {
     try {
-        const cleanedText = data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const schedule = JSON.parse(cleanedText);
-        return schedule as Schedule[];
-    } catch (parseError) {
-        console.error("Failed to parse schedule JSON from Gemini response:", data.text, parseError);
-        throw new Error("The AI returned an invalid schedule format.");
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'Generate 4 common but soulful lofi hip hop chord progressions. For each, provide the chords, the key, and a brief description of the mood. Format it clearly.'
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error generating chord progression:", error);
+        return "Sorry, I couldn't generate a chord progression right now. Please try again later.";
     }
-  } catch (error) {
-    console.error('Error generating daily schedule:', error);
-    throw error;
-  }
-}
+};
+
+export const generateStudioVibeImage = async (prompt: string): Promise<string> => {
+    try {
+        const fullPrompt = `A highly detailed, atmospheric, cinematic photo of a music production studio. The vibe is: ${prompt}. Focus on lighting and mood. No people.`;
+        const response = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: fullPrompt,
+            config: {
+                numberOfImages: 1,
+                outputMimeType: 'image/jpeg',
+                aspectRatio: '16:9',
+            },
+        });
+        
+        if (response.generatedImages && response.generatedImages.length > 0) {
+            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64ImageBytes}`;
+        } else {
+            throw new Error("No image was generated.");
+        }
+    } catch (error) {
+        console.error("Error generating studio vibe image:", error);
+        throw new Error("Failed to generate image. Please check your prompt and try again.");
+    }
+};
+
+export const getCreativePrompt = async (): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'Generate a single, short, and actionable creative prompt for a music producer experiencing creative block. The prompt should be unconventional and inspiring. Make it one sentence.'
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error getting creative prompt:", error);
+        return "Sorry, I couldn't get a creative prompt right now. Try taking a 5-minute walk!";
+    }
+};
+
+export const generateDailySchedule = async (goals: string): Promise<Schedule> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Create a balanced daily schedule for a music producer with these main goals: ${goals}. The schedule should start at 9:00 AM, include focused work blocks, creative time, and essential breaks for lunch and rest. The output must be a JSON object.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING, description: "A catchy title for the daily schedule." },
+                        schedule: {
+                            type: Type.ARRAY,
+                            description: "The list of schedule items for the day.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    time: { type: Type.STRING, description: "The start time of the task (e.g., '9:00 AM')." },
+                                    task: { type: Type.STRING, description: "The description of the task or break." },
+                                    duration: { type: Type.STRING, description: "How long the task will take (e.g., '45 mins')." },
+                                    isBreak: { type: Type.BOOLEAN, description: "Whether this item is a break or a work task." }
+                                },
+                                required: ["time", "task", "duration", "isBreak"]
+                            }
+                        }
+                    },
+                    required: ["title", "schedule"]
+                },
+            },
+        });
+
+        const jsonStr = response.text.trim();
+        return JSON.parse(jsonStr) as Schedule;
+    } catch (error) {
+        console.error("Error generating daily schedule:", error);
+        throw new Error("Failed to generate the schedule. Please ensure your goals are clear and try again.");
+    }
+};
