@@ -19,3 +19,20 @@ export interface Schedule {
   title: string;
   schedule: ScheduleItem[];
 }
+
+export interface Chord {
+  name: string;
+  midiNotes: number[];
+}
+
+export interface Progression {
+  name: string;
+  key: string;
+  mood: string;
+  chords: Chord[];
+}
+
+export interface ChordProgressionResponse {
+  progressions: Progression[];
+  displayText: string;
+}

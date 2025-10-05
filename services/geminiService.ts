@@ -1,4 +1,4 @@
-import { Schedule } from "../types";
+import { ChordProgressionResponse, Progression, Schedule } from "../types";
 
 // A helper function to call our secure Netlify Function backend.
 // This acts as a proxy to the Gemini API.
@@ -21,13 +21,22 @@ async function callApi(action: string, payload?: any) {
   return data.result;
 }
 
-export const generateChordProgression = async (): Promise<string> => {
+export const generateChordProgression = async (): Promise<ChordProgressionResponse> => {
   try {
     return await callApi('generateChordProgression');
   } catch (error) {
     console.error("Error generating chord progression:", error);
-    return "Sorry, I couldn't generate a chord progression right now. Please try again later.";
+    throw new Error("Sorry, I couldn't generate chord progressions right now. Please try again later.");
   }
+};
+
+export const generateMidiFile = async (progression: Progression): Promise<string> => {
+    try {
+        return await callApi('generateMidi', { progression });
+    } catch (error) {
+        console.error("Error generating MIDI file:", error);
+        throw new Error("Failed to generate MIDI file. Please try again.");
+    }
 };
 
 export const generateStudioVibeImage = async (prompt: string): Promise<string> => {

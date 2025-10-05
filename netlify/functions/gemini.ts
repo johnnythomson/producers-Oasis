@@ -1,10 +1,111 @@
 import type { Handler } from "@netlify/functions";
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Schedule } from "../../types";
+import type { Chord, Progression, Schedule } from "../../types";
 
 // Initialize the AI client securely on the server-side using environment variables.
 // The API_KEY is never exposed to the client.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+
+/**
+ * Writes a variable-length quantity (VLQ) for MIDI delta-times.
+ */
+function writeVariableLength(value: number): number[] {
+    if (value < 0) throw new Error("Cannot write negative variable-length quantity");
+    if (value === 0) return [0x00];
+    
+    const buffer: number[] = [];
+    let v = value;
+    
+    buffer.unshift(v & 0x7F);
+    v >>= 7;
+
+    while (v > 0) {
+        buffer.unshift((v & 0x7F) | 0x80);
+        v >>= 7;
+    }
+    
+    return buffer;
+}
+
+
+/**
+ * Creates a simple MIDI file from a sequence of chords.
+ * Each chord is played as a whole note.
+ */
+function createMidiFile(chords: Chord[]): Uint8Array {
+  const PPQN = 480; // Pulses per quarter note
+  const wholeNoteDuration = PPQN * 4;
+
+  const trackEvents: number[] = [];
+
+  // Initial events for the first chord
+  if (chords.length > 0) {
+    const firstChord = chords[0];
+    // Note On for all notes in the first chord at time 0
+    for (const note of firstChord.midiNotes) {
+      trackEvents.push(...writeVariableLength(0));
+      trackEvents.push(0x90, note, 0x64); // Note On, channel 0, velocity 100
+    }
+  }
+
+  // Subsequent chords
+  for (let i = 1; i < chords.length; i++) {
+    const prevChord = chords[i - 1];
+    const currentChord = chords[i];
+
+    // Wait for a whole note before changing chords
+    trackEvents.push(...writeVariableLength(wholeNoteDuration));
+
+    // Turn off all notes from the previous chord
+    for (const note of prevChord.midiNotes) {
+      trackEvents.push(...writeVariableLength(0));
+      trackEvents.push(0x80, note, 0x40); // Note Off, channel 0, velocity 64
+    }
+
+    // Turn on all notes for the current chord
+    for (const note of currentChord.midiNotes) {
+      trackEvents.push(...writeVariableLength(0));
+      trackEvents.push(0x90, note, 0x64); // Note On
+    }
+  }
+
+  // Final Note Off events for the last chord
+  if (chords.length > 0) {
+    trackEvents.push(...writeVariableLength(wholeNoteDuration));
+    const lastChord = chords[chords.length - 1];
+    for (const note of lastChord.midiNotes) {
+      trackEvents.push(...writeVariableLength(0));
+      trackEvents.push(0x80, note, 0x40); // Note Off
+    }
+  }
+
+  // End of Track event
+  trackEvents.push(...writeVariableLength(1));
+  trackEvents.push(0xFF, 0x2F, 0x00);
+
+  const trackLength = trackEvents.length;
+
+  const header = [
+    0x4D, 0x54, 0x68, 0x64, // 'MThd'
+    0x00, 0x00, 0x00, 0x06, // Chunk length (6)
+    0x00, 0x00,             // Format 0 (single track)
+    0x00, 0x01,             // Number of tracks (1)
+    (PPQN >> 8) & 0xFF, PPQN & 0xFF, // Division (PPQN)
+  ];
+
+  const trackHeader = [
+    0x4D, 0x54, 0x72, 0x6B, // 'MTrk'
+    (trackLength >> 24) & 0xFF,
+    (trackLength >> 16) & 0xFF,
+    (trackLength >> 8) & 0xFF,
+    trackLength & 0xFF,
+  ];
+
+  const midiBytes = [...header, ...trackHeader, ...trackEvents];
+  return new Uint8Array(midiBytes);
+}
+
 
 const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -19,9 +120,53 @@ const handler: Handler = async (event) => {
       case 'generateChordProgression':
         const chordResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: 'Generate 4 common but soulful lofi hip hop chord progressions. For each, provide the chords, the key, and a brief description of the mood. Format it clearly.'
+            contents: `Generate 4 common but soulful lofi hip hop chord progressions.
+For each progression, provide: a unique 'name', the 'key', a brief 'mood' description, and a list of 'chords'.
+For each chord, provide its 'name' (e.g., 'Cm7') and an array of its MIDI note numbers as 'midiNotes' (e.g., C4=60, C#4=61, D4=62).
+Also provide a single 'displayText' field containing all this information formatted nicely as a single block of text for display.
+The output must be a valid JSON object.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        displayText: { type: Type.STRING },
+                        progressions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    key: { type: Type.STRING },
+                                    mood: { type: Type.STRING },
+                                    chords: {
+                                        type: Type.ARRAY,
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                name: { type: Type.STRING },
+                                                midiNotes: { type: Type.ARRAY, items: { type: Type.INTEGER } }
+                                            },
+                                            required: ["name", "midiNotes"]
+                                        }
+                                    }
+                                },
+                                required: ["name", "key", "mood", "chords"]
+                            }
+                        }
+                    },
+                    required: ["displayText", "progressions"]
+                }
+            }
         });
-        result = chordResponse.text;
+        result = JSON.parse(chordResponse.text.trim());
+        break;
+
+      case 'generateMidi':
+        const { progression } = payload as { progression: Progression };
+        if (!progression || !progression.chords) throw new Error("Progression data is required for MIDI generation.");
+        const midiData = createMidiFile(progression.chords);
+        result = Buffer.from(midiData).toString('base64');
         break;
 
       case 'generateStudioVibeImage':
